@@ -1,6 +1,34 @@
 import { Configuration, OpenAIApi } from "openai";
 import { NextApiRequest, NextApiResponse } from "next";
+import Cors from "cors";
 import { Component, extract, insert } from "@/lib/labels";
+
+// Initializing the cors middleware
+// You can read more about the available options here: https://github.com/expressjs/cors#configuration-options
+const cors = Cors({
+	methods: ["POST", "GET", "HEAD"],
+});
+
+// Helper method to wait for a middleware to execute before continuing
+// And to throw an error when an error happens in a middleware
+function runMiddleware(
+	req: NextApiRequest,
+	res: NextApiResponse,
+	fn: Function
+)
+{
+	return new Promise((
+		resolve,
+		reject) => {
+		fn(req, res, (result: any) => {
+			if (result instanceof Error) {
+				return reject(result);
+			}
+
+			return resolve(result);
+		});
+	});
+}
 
 const configuration = new Configuration({
 	apiKey: process.env.OPENAI_API_KEY,
@@ -16,7 +44,6 @@ function generatePrompt(
 	components: object[])
 {
 	console.log(PromptText);
-//	console.log(PromptText + JSON.stringify(components));
 	return PromptText + JSON.stringify(components);
 }
 
@@ -24,6 +51,8 @@ export default async function(
 	req: NextApiRequest,
 	res: NextApiResponse)
 {
+	await runMiddleware(req, res, cors);
+
 	if (!configuration.apiKey) {
 		res.status(500).json({
 			error: {
@@ -34,8 +63,8 @@ export default async function(
 		return;
 	}
 
-//	const { components = [] } = req.body;
-//
+	const components = req.body;
+
 //	if (components.length === 0) {
 //		res.status(400).json({
 //			error: {
@@ -45,12 +74,43 @@ export default async function(
 //
 //		return;
 //	}
+//console.log("=== req", components);
 
-	const components = Test;
+//	const components = Test;
 	const input = extract(components);
+//	let response: NextResponse = new NextResponse();
+//	let response: NextResponse;
 
+//	try {
+//		console.time("chat-request");
+//console.log("=== about to call openai");
+//
+//		const completion = await openai.createChatCompletion({
+//			model: "gpt-3.5-turbo-0301",
+//			messages: [
+//				{
+//					role: "system",
+//					content: "You are a helpful San Francisco city employee."
+//				},
+//				{
+//					role: "user",
+//					content: generatePrompt(input)
+//				}
+//			],
+////			max_tokens: 1000,
+////			temperature: 0.6,
+//			temperature: 0,
+//		});
+//console.log("=== after call openai");
+//
+////		console.timeEnd("chat-request");
+//		console.log(completion.data.usage);
+//
+//		const output = JSON.parse(completion.data.choices[0].message?.content ?? "[]");
+//		const result = insert(output, components);
 	try {
 		console.time("chat-request");
+console.log("=== about to call openai");
 
 		const completion = await openai.createChatCompletion({
 			model: "gpt-3.5-turbo-0301",
@@ -68,12 +128,20 @@ export default async function(
 //			temperature: 0.6,
 			temperature: 0,
 		});
+console.log("=== after call openai");
 
 		console.timeEnd("chat-request");
 		console.log(completion.data.usage);
 
 		const output = JSON.parse(completion.data.choices[0].message?.content ?? "[]");
 		const result = insert(output, components);
+
+//		const result = input;
+
+//		response = new NextResponse(JSON.stringify({ result }), {
+//			status: 200,
+//			headers: req.headers
+//		});
 
 		res.status(200).json({
 			prompt: PromptText,
@@ -82,9 +150,11 @@ export default async function(
 	} catch (error) {
 		if (error.response) {
 			console.error(error.response.status, error.response.data);
+//			response = new NextResponse(JSON.stringify({ error: error.response.data }), { status: error.response.status });
 			res.status(error.response.status).json(error.response.data);
 		} else {
 			console.error(`Error with OpenAI API request: ${error.message}.`, error);
+//			response = new NextResponse(JSON.stringify({ error: { message: error.message } }), { status: 500 });
 			res.status(500).json({
 				error: {
 					message: error.message || "An error occurred during your request.",
@@ -92,6 +162,14 @@ export default async function(
 			});
 		}
 	}
+
+//console.log("==== response", res);
+//console.log("==== response", response);
+
+//	return res;
+
+//	return cors(req, response);
+//	return cors(req, res);
 }
 
 const Test: Component[] = [
