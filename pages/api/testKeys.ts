@@ -1,11 +1,11 @@
 import fs from "node:fs";
-import Cors from "cors";
 import { Configuration, OpenAIApi } from "openai";
 import { NextApiRequest, NextApiResponse } from "next";
+import Cors from "cors";
 import { extract, insert } from "@/lib/labels";
-import createLocalPath from "@/lib/local";
+import createLocal from "@/lib/local";
 
-const local = createLocalPath(import.meta.url);
+const local = createLocal(import.meta.url);
 
 // Initializing the cors middleware
 // You can read more about the available options here: https://github.com/expressjs/cors#configuration-options
@@ -39,7 +39,7 @@ const configuration = new Configuration({
 });
 const openai = new OpenAIApi(configuration);
 
-const PromptText = `Modify the items in each of the following "components" arrays to add a unique "id" value for each item that has a "label" key. The "id" MUST be less than 33 characters long and MUST SUCCINCTLY summarize the "label" as a camelCased string. The "id" must be unique across the list. Ensure that each option within the "options" arrays also has a similar "id" value.
+const PromptText = `Modify the following JSON array to add a unique "id" value for each item that has a "label" key. The "id" MUST be less than 33 characters long and MUST SUCCINCTLY summarize the "label" as a camelCased string. The "id" must be unique across the list. Ensure that each option within the "options" arrays also has a similar "id" value.
 `;
 
 function generatePrompt(
@@ -64,7 +64,8 @@ export default async function(
 		return;
 	}
 
-	const components = req.body;
+	const form = fs.readFileSync(local("form-sample.json"), "utf8");
+	const components = JSON.parse(form);
 
 	if (components.length === 0) {
 		res.status(400).json({
@@ -76,11 +77,9 @@ export default async function(
 		return;
 	}
 
-		// the GPT 3.5 model's limit of 4K tokens isn't enough to handle an entire
-		// form's worth of labels, so run it just on panel #2
-	const targetPanelIndex = 2;
-	const targetPanel = [components[targetPanelIndex]];
-	const input = extract(targetPanel);
+	const input = extract(components);
+console.log("--- input", input.length, input[1]);
+console.log("--- calling GPT");
 
 	try {
 		console.time("chat-request");
@@ -97,27 +96,26 @@ export default async function(
 					content: generatePrompt(input)
 				}
 			],
-			temperature: .2,
+			temperature: 0,
 		});
 
 		console.timeEnd("chat-request");
 		console.log(completion.data.usage);
-//console.log("---- result", completion.data);
 
-		fs.writeFileSync(local("result.txt"), JSON.stringify(completion.data.choices ?? "[]"));
-
+//		const [output] = JSON.parse(completion.data.choices[0].message?.content ?? "[]");
 		const output = JSON.parse(completion.data.choices[0].message?.content ?? "[]");
-//console.log("--- output", output.length, JSON.stringify(output[0], null, 2));
 
-			// add the generated IDs to the target panel, which is at 0th index in the
-			// output array, and then insert that back into the components that were posted
-		components[targetPanelIndex] = insert(output, targetPanel)[0];
+console.log("--- output", output?.length);
+
+console.log("--- about to call insert");
+
+		const result = insert(output, components);
+
+		fs.writeFileSync(local("result.json"), JSON.stringify(result, null, 2));
 
 		res.status(200).json({
-			result: components
+			result
 		});
-
-		fs.writeFileSync(local("result.json"), JSON.stringify(components, null, 2));
 	} catch (error) {
 		if (error.response) {
 			console.error(error.response.status, error.response.data);
