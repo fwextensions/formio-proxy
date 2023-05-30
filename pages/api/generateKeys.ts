@@ -7,23 +7,20 @@ import createLocalPath from "@/lib/local";
 
 const local = createLocalPath(import.meta.url);
 
-// Initializing the cors middleware
-// You can read more about the available options here: https://github.com/expressjs/cors#configuration-options
+	// Initializing the cors middleware
+	// You can read more about the available options here: https://github.com/expressjs/cors#configuration-options
 const cors = Cors({
 	methods: ["POST", "GET", "HEAD"],
 });
 
-// Helper method to wait for a middleware to execute before continuing
-// And to throw an error when an error happens in a middleware
+	// Helper method to wait for a middleware to execute before continuing
+	// And to throw an error when an error happens in a middleware
 function runMiddleware(
 	req: NextApiRequest,
 	res: NextApiResponse,
-	fn: Function
-)
+	fn: Function)
 {
-	return new Promise((
-		resolve,
-		reject) => {
+	return new Promise((resolve, reject) => {
 		fn(req, res, (result: any) => {
 			if (result instanceof Error) {
 				return reject(result);
