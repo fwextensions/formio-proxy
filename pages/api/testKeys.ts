@@ -1,7 +1,8 @@
 import fs from "node:fs";
+import Cors from "cors";
+import axios from "axios";
 import { Configuration, OpenAIApi } from "openai";
 import { NextApiRequest, NextApiResponse } from "next";
-import Cors from "cors";
 import { extractLabels, insertKeys } from "@/lib/labels";
 import createLocal from "@/lib/local";
 
@@ -42,8 +43,6 @@ const openai = new OpenAIApi(configuration);
 const promptText = (count: number) => `Each line in the following list is the label of an HTML form element. The labels may be as short as "Yes" or "No". Replace each label with a camelCased identifier that best summarizes the label. Each label must be less than 33 characters long, must start with a lowercase letter and must be unique across the list. There are ${count} labels, so there must be ${count} identifiers in the response.
 
 `;
-//const PromptText = `Modify the following JSON array to add a unique "id" value for each item that has a "label" key. The "id" MUST be less than 33 characters long and MUST SUCCINCTLY summarize the "label" as a camelCased string. The "id" must be unique across the list. Ensure that each option within the "options" arrays also has a similar "id" value.
-//`;
 
 function generatePrompt(
 	labels: string[])
@@ -126,68 +125,16 @@ console.log("--- about to call insert");
 			result
 		});
 	} catch (error) {
-		if (error.response) {
-			console.error(error.response.status, error.response.data);
-			res.status(error.response.status).json(error.response.data);
-		} else {
+		if (error instanceof Error) {
 			console.error(`Error with OpenAI API request: ${error.message}.`, error);
 			res.status(500).json({
 				error: {
 					message: error.message || "An error occurred during your request.",
 				}
 			});
+		} else if (axios.isAxiosError(error) && error.response) {
+			console.error(error.response.status, error.response.data);
+			res.status(error.response.status).json(error.response.data);
 		}
 	}
-//	const input = extract(components);
-//console.log("--- input", input.length, input[1]);
-//console.log("--- calling GPT");
-//
-//	try {
-//		console.time("chat-request");
-//
-//		const completion = await openai.createChatCompletion({
-//			model: "gpt-3.5-turbo-0301",
-//			messages: [
-//				{
-//					role: "system",
-//					content: "You are a helpful employee of the City and County of San Francisco."
-//				},
-//				{
-//					role: "user",
-//					content: generatePrompt(input)
-//				}
-//			],
-//			temperature: 0,
-//		});
-//
-//		console.timeEnd("chat-request");
-//		console.log(completion.data.usage);
-//
-////		const [output] = JSON.parse(completion.data.choices[0].message?.content ?? "[]");
-//		const output = JSON.parse(completion.data.choices[0].message?.content ?? "[]");
-//
-//console.log("--- output", output?.length);
-//
-//console.log("--- about to call insert");
-//
-//		const result = insert(output, components);
-//
-//		fs.writeFileSync(local("result.json"), JSON.stringify(result, null, 2));
-//
-//		res.status(200).json({
-//			result
-//		});
-//	} catch (error) {
-//		if (error.response) {
-//			console.error(error.response.status, error.response.data);
-//			res.status(error.response.status).json(error.response.data);
-//		} else {
-//			console.error(`Error with OpenAI API request: ${error.message}.`, error);
-//			res.status(500).json({
-//				error: {
-//					message: error.message || "An error occurred during your request.",
-//				}
-//			});
-//		}
-//	}
 }

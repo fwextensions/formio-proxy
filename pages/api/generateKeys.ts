@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import Cors from "cors";
+import axios from "axios";
 import { Configuration, OpenAIApi } from "openai";
 import { NextApiRequest, NextApiResponse } from "next";
 import { extractLabels, insertKeys } from "@/lib/labels";
@@ -110,16 +111,16 @@ export default async function(
 
 		fs.writeFileSync(local("result.json"), JSON.stringify([panels, paths, output, existingKeys], null, 2));
 	} catch (error) {
-		if (error.response) {
-			console.error(error.response.status, error.response.data);
-			res.status(error.response.status).json(error.response.data);
-		} else {
+		if (error instanceof Error) {
 			console.error(`Error with OpenAI API request: ${error.message}.`, error);
 			res.status(500).json({
 				error: {
 					message: error.message || "An error occurred during your request.",
 				}
 			});
+		} else if (axios.isAxiosError(error) && error.response) {
+			console.error(error.response.status, error.response.data);
+			res.status(error.response.status).json(error.response.data);
 		}
 	}
 }
