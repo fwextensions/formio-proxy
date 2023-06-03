@@ -2,7 +2,7 @@ import fs from "node:fs";
 import Cors from "cors";
 import { Configuration, OpenAIApi } from "openai";
 import { NextApiRequest, NextApiResponse } from "next";
-import { extract, insert } from "@/lib/labels";
+import { extractLabels, insertKeys } from "@/lib/labels";
 import createLocalPath from "@/lib/local";
 
 const local = createLocalPath(import.meta.url);
@@ -36,13 +36,14 @@ const configuration = new Configuration({
 });
 const openai = new OpenAIApi(configuration);
 
-const PromptText = `Modify the items in each of the following "components" arrays to add a unique "id" value for each item that has a "label" key. The "id" MUST be less than 33 characters long and MUST SUCCINCTLY summarize the "label" as a camelCased string. The "id" must be unique across the list. Ensure that each option within the "options" arrays also has a similar "id" value.
+const promptText = (count: number) => `Each line in the following list is the label of an HTML form element. The labels may be as short as "Yes" or "No". Replace each label with a camelCased identifier that best summarizes the label. Each label must be less than 33 characters long, must start with a lowercase letter and must be unique across the list. There are ${count} labels, so there must be ${count} identifiers in the response.
+
 `;
 
 function generatePrompt(
-	components: object[])
+	labels: string[])
 {
-	return PromptText + JSON.stringify(components);
+	return promptText(labels.length) + labels.join("\n");
 }
 
 export default async function(
@@ -61,9 +62,9 @@ export default async function(
 		return;
 	}
 
-	const components = req.body;
+	const panels = req.body;
 
-	if (components.length === 0) {
+	if (panels.length === 0) {
 		res.status(400).json({
 			error: {
 				message: "components list is empty.",
@@ -73,11 +74,7 @@ export default async function(
 		return;
 	}
 
-		// the GPT 3.5 model's limit of 4K tokens isn't enough to handle an entire
-		// form's worth of labels, so run it just on panel #2
-	const targetPanelIndex = 2;
-	const targetPanel = [components[targetPanelIndex]];
-	const input = extract(targetPanel);
+	const [labels, paths, existingKeys] = extractLabels(panels);
 
 	try {
 		console.time("chat-request");
@@ -91,30 +88,27 @@ export default async function(
 				},
 				{
 					role: "user",
-					content: generatePrompt(input)
+					content: generatePrompt(labels)
 				}
 			],
-			temperature: .2,
+			temperature: 0,
 		});
 
 		console.timeEnd("chat-request");
 		console.log(completion.data.usage);
-//console.log("---- result", completion.data);
+
+		const output = (completion.data.choices[0].message?.content || "").split("\n");
 
 		fs.writeFileSync(local("result.txt"), JSON.stringify(completion.data.choices ?? "[]"));
 
-		const output = JSON.parse(completion.data.choices[0].message?.content ?? "[]");
-//console.log("--- output", output.length, JSON.stringify(output[0], null, 2));
-
-			// add the generated IDs to the target panel, which is at 0th index in the
-			// output array, and then insert that back into the components that were posted
-		components[targetPanelIndex] = insert(output, targetPanel)[0];
+			// add the generated IDs to the panels
+		const result = insertKeys(panels, paths, output, existingKeys);
 
 		res.status(200).json({
-			result: components
+			result
 		});
 
-		fs.writeFileSync(local("result.json"), JSON.stringify(components, null, 2));
+		fs.writeFileSync(local("result.json"), JSON.stringify([panels, paths, output, existingKeys], null, 2));
 	} catch (error) {
 		if (error.response) {
 			console.error(error.response.status, error.response.data);
