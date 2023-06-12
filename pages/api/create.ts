@@ -24,5 +24,13 @@ export default async (request: NextRequest) => {
 		body
 	});
 
-	return cors(request, response);
+	return cors(
+		request,
+		new Response(response.body, {
+			status: 200,
+			headers: {
+				"Content-Type": "application/json"
+			}
+		})
+	);
 };
