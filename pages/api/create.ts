@@ -26,6 +26,9 @@ export default async (request: NextRequest) => {
 
 	return cors(
 		request,
+			// we can't just use response.clone() here, as the headers still seem to
+			// be immutable after cloning, but cors() needs to change them.  clone()
+			// seems to work in localhost but throws an error on the server.
 		new Response(response.body, {
 			status: 200,
 			headers: {
